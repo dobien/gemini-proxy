@@ -1,5 +1,5 @@
 const express = require('express');
-const fetch = require('node-fetch');
+const https = require('https');
 const cors = require('cors');
 
 const app = express();
@@ -18,32 +18,31 @@ app.all('*', async (req, res) => {
   // Формирование полного URL для запроса
   const proxiedUrl = externalUrl + req.url;
 
-  try {
-    // Проксирование запроса
-    const proxiedRequest = new fetch.Request(proxiedUrl, {
-      method: req.method,
-      headers: req.headers,
-      body: req.method !== 'GET' && req.method !== 'HEAD' ? JSON.stringify(req.body) : null, // Преобразуем тело запроса в JSON-строку
-    });
+  const options = {
+    hostname: 'generativelanguage.googleapis.com',
+    path: req.url,
+    method: req.method,
+    headers: req.headers,
+    rejectUnauthorized: false // Отключаем проверку сертификата
+  };
 
-    // Выполнение запроса к внешнему API
-    const response = await fetch(proxiedRequest);
-
-    // Установка заголовков ответа
-    response.headers.forEach( (value, name) => {
+  const reqToExternal = https.request(options, (externalRes) => {
+    res.status(externalRes.statusCode);
+    externalRes.headers.forEach((value, name) => {
       res.setHeader(name, value);
     });
+    externalRes.pipe(res);
+  });
 
-    // Отправка ответа клиенту
-    res.status(response.status);
-    const text = await response.text();
-    res.send(text);
+  reqToExternal.on('error', (e) => {
+    console.error(e);
+    res.status(500).json({ error: e.message });
+  });
 
-  } catch (error) {
-    // Обработка ошибок
-    console.error(error);
-    res.status(500).json({ error: error.message });
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    reqToExternal.write(JSON.stringify(req.body));
   }
+  reqToExternal.end();
 });
 
 app.listen(port, () => {
