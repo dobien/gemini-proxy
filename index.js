@@ -29,9 +29,9 @@ app.all('*', async (req, res) => {
   const reqToExternal = https.request(options, (externalRes) => {
     res.status(externalRes.statusCode);
     if (externalRes.headers) {
-      Object.keys(externalRes.headers).forEach((name) => {
+      for (const name in externalRes.headers) {
         res.setHeader(name, externalRes.headers[name]);
-      });
+      }
     }
     externalRes.pipe(res);
   });
