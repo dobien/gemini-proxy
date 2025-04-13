@@ -14,37 +14,41 @@ app.use(express.json());
 app.all('*', async (req, res) => {
   // URL внешнего сервера Gemini API
   const externalUrl = "https://generativelanguage.googleapis.com";
-
-  // Формирование полного URL для запроса
-  const proxiedUrl = externalUrl + req.url;
+  
+  // Используем оригинальный URL (с query-параметрами), и заменяем двоеточия на URL-кодированное представление
+  // Это необходимо, если в URL присутствует двоеточие (например, gemini-2.0-flash-exp:generateContent)
+  let encodedPath = req.originalUrl.replace(/:/g, '%3A');
 
   const options = {
     hostname: 'generativelanguage.googleapis.com',
-    path: req.url,
+    // Подставляем закодированный путь
+    path: encodedPath,
     method: req.method,
     headers: req.headers,
-    rejectUnauthorized: false // Отключаем проверку сертификата
+    rejectUnauthorized: false // Если нужно отключить проверку сертификата
   };
 
-  const reqToExternal = https.request(options, (externalRes) => {
+  const externalReq = https.request(options, (externalRes) => {
+    // Устанавливаем статус ответа по статусу внешнего ответа
     res.status(externalRes.statusCode);
-    if (externalRes.headers) {
-      for (const name in externalRes.headers) {
-        res.setHeader(name, externalRes.headers[name]);
-      }
+    // Передаем заголовки внешнего ответа клиенту
+    for (const name in externalRes.headers) {
+      res.setHeader(name, externalRes.headers[name]);
     }
+    // Передаем поток данных наружу
     externalRes.pipe(res);
   });
 
-  reqToExternal.on('error', (e) => {
-    console.error(e);
-    res.status(500).json({ error: e.message });
+  externalReq.on('error', (err) => {
+    console.error('Ошибка запроса: ', err);
+    res.status(500).json({ error: err.message });
   });
 
+  // Для методов, отличных от GET/HEAD, отправляем тело запроса
   if (req.method !== 'GET' && req.method !== 'HEAD') {
-    reqToExternal.write(JSON.stringify(req.body));
+    externalReq.write(JSON.stringify(req.body));
   }
-  reqToExternal.end();
+  externalReq.end();
 });
 
 app.listen(port, () => {
