@@ -5,26 +5,23 @@ const cors = require('cors');
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Middleware для обработки CORS (необходимо для запросов из браузера)
 app.use(cors());
-
-// Middleware для обработки JSON-тела запроса
 app.use(express.json());
 
 app.all('*', async (req, res) => {
-  // URL внешнего сервера Gemini API
   const externalUrl = "https://generativelanguage.googleapis.com";
-
-  // Используем оригинальный URL без изменения (Express обычно уже декодирует URL)
   const options = {
     hostname: 'generativelanguage.googleapis.com',
-    path: req.originalUrl, // передаём URL как есть
+    path: req.originalUrl,
     method: req.method,
     headers: req.headers,
-    rejectUnauthorized: false // Отключаем проверку сертификата
+    rejectUnauthorized: false
   };
 
+  console.log(`Forwarding request to ${externalUrl}${req.originalUrl}`);
+
   const externalReq = https.request(options, (externalRes) => {
+    console.log(`Received response with status code ${externalRes.statusCode}`);
     res.status(externalRes.statusCode);
     for (const name in externalRes.headers) {
       res.setHeader(name, externalRes.headers[name]);
@@ -33,7 +30,7 @@ app.all('*', async (req, res) => {
   });
 
   externalReq.on('error', (err) => {
-    console.error('Ошибка запроса: ', err);
+    console.error('Request error: ', err);
     res.status(500).json({ error: err.message });
   });
 
