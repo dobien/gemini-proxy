@@ -12,16 +12,16 @@ app.all('*', async (req, res) => {
   const externalUrl = "https://generativelanguage.googleapis.com";
   const options = {
     hostname: 'generativelanguage.googleapis.com',
-    path: req.originalUrl,
+    path: req.originalUrl, // Убедитесь, что путь включает query-параметры
     method: req.method,
-    headers: { ...req.headers }, // Копируем заголовки
+    headers: {
+      ...req.headers,
+      host: 'generativelanguage.googleapis.com' // Переопределяем Host
+    },
     rejectUnauthorized: false
   };
 
-  // Переопределяем Host для целевого сервера
-  options.headers.host = options.hostname;
-
-  // Удаляем лишние заголовки, которые могут мешать
+  // Удаляем конфликтующие заголовки
   delete options.headers.origin;
   delete options.headers.referer;
 
