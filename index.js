@@ -14,26 +14,40 @@ app.all('*', async (req, res) => {
     hostname: 'generativelanguage.googleapis.com',
     path: req.originalUrl,
     method: req.method,
-    headers: req.headers,
+    headers: { ...req.headers }, // Копируем заголовки
     rejectUnauthorized: false
   };
 
-  console.log(`Forwarding request to ${externalUrl}${req.originalUrl}`);
+  // Переопределяем Host для целевого сервера
+  options.headers.host = options.hostname;
 
-  const externalReq = https.request(options, (externalRes) => {
+  // Удаляем лишние заголовки, которые могут мешать
+  delete options.headers.origin;
+  delete options.headers.referer;
+
+  console.log(`Forwarding to: ${externalUrl}${req.originalUrl}`, options.headers);
+
+  /*const externalReq = https.request(options, (externalRes) => {
     console.log(`Received response with status code ${externalRes.statusCode}`);
     res.status(externalRes.statusCode);
     for (const name in externalRes.headers) {
       res.setHeader(name, externalRes.headers[name]);
     }
     externalRes.pipe(res);
+  });*/
+
+  const externalReq = https.request(options, (externalRes) => {
+    console.log(`Received response with status code ${externalRes.statusCode}`);
+    res.status(externalRes.statusCode);
+    externalRes.pipe(res);
   });
 
   externalReq.on('error', (err) => {
-    console.error('Request error: ', err);
+    console.error('Error:', err);
     res.status(500).json({ error: err.message });
   });
 
+  // Отправляем тело запроса, если необходимо
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     externalReq.write(JSON.stringify(req.body));
   }
