@@ -16,7 +16,8 @@ app.all('*', async (req, res) => {
     method: req.method,
     headers: {
       ...req.headers,
-      host: 'generativelanguage.googleapis.com' // Переопределяем Host
+      host: 'generativelanguage.googleapis.com', // Переопределяем Host
+      'accept-encoding': 'identity' // Форсируем текстовый ответ
     },
     rejectUnauthorized: false
   };
@@ -36,9 +37,21 @@ app.all('*', async (req, res) => {
     externalRes.pipe(res);
   });*/
 
-  const externalReq = https.request(options, (externalRes) => {
+  /*const externalReq = https.request(options, (externalRes) => {
     console.log(`Received response with status code ${externalRes.statusCode}`);
     res.status(externalRes.statusCode);
+    externalRes.pipe(res);
+  });*/
+
+  const externalReq = https.request(options, (externalRes) => {
+    console.log(`Received response with status code ${externalRes.statusCode}`);
+    // Передаем все заголовки кроме сжатия
+    res.removeHeader('content-encoding');
+    for (const [key, value] of Object.entries(externalRes.headers)) {
+      if (key !== 'content-encoding') {
+        res.setHeader(key, value);
+      }
+    }
     externalRes.pipe(res);
   });
 
