@@ -1,72 +1,75 @@
 const express = require('express');
 const https = require('https');
 const cors = require('cors');
+const bodyParser = require('body-parser');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-app.use(cors());
-app.use(express.json());
+// Middleware для обработки raw body
+app.use(bodyParser.raw({ type: '*/*' }));
+
+// CORS configuration
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['*']
+}));
 
 app.all('*', async (req, res) => {
-  const externalUrl = "https://generativelanguage.googleapis.com";
-  const options = {
-    hostname: 'generativelanguage.googleapis.com',
-    path: req.originalUrl, // Убедитесь, что путь включает query-параметры
-    method: req.method,
-    headers: {
-      ...req.headers,
-      host: 'generativelanguage.googleapis.com', // Переопределяем Host
-      'accept-encoding': 'identity' // Форсируем текстовый ответ
-    },
-    rejectUnauthorized: false
-  };
+  try {
+    const targetPath = req.originalUrl;
+    const targetUrl = `https://generativelanguage.googleapis.com${targetPath}`;
+    
+    console.log(`Proxying to: ${targetUrl}`);
 
-  // Удаляем конфликтующие заголовки
-  delete options.headers.origin;
-  delete options.headers.referer;
-
-  console.log(`Forwarding to: ${externalUrl}${req.originalUrl}`, options.headers);
-
-  /*const externalReq = https.request(options, (externalRes) => {
-    console.log(`Received response with status code ${externalRes.statusCode}`);
-    res.status(externalRes.statusCode);
-    for (const name in externalRes.headers) {
-      res.setHeader(name, externalRes.headers[name]);
-    }
-    externalRes.pipe(res);
-  });*/
-
-  /*const externalReq = https.request(options, (externalRes) => {
-    console.log(`Received response with status code ${externalRes.statusCode}`);
-    res.status(externalRes.statusCode);
-    externalRes.pipe(res);
-  });*/
-
-  const externalReq = https.request(options, (externalRes) => {
-    console.log(`Received response with status code ${externalRes.statusCode}`);
-    // Передаем все заголовки кроме сжатия
-    res.removeHeader('content-encoding');
-    for (const [key, value] of Object.entries(externalRes.headers)) {
-      if (key !== 'content-encoding') {
-        res.setHeader(key, value);
+    const options = {
+      method: req.method,
+      headers: {
+        ...req.headers,
+        host: 'generativelanguage.googleapis.com',
+        'x-proxy-request': 'true' // Удаляем в конечном запросе
       }
+    };
+
+    // Удаляем ненужные заголовки
+    delete options.headers['content-length'];
+    delete options.headers['x-proxy-request'];
+    delete options.headers['origin'];
+    delete options.headers['referer'];
+
+    const externalReq = https.request(targetUrl, options, (externalRes) => {
+      console.log(`Response status: ${externalRes.statusCode}`);
+      
+      // Передаем заголовки ответа
+      res.writeHead(
+        externalRes.statusCode, 
+        externalRes.statusMessage,
+        externalRes.headers
+      );
+      
+      // Потоковая передача данных
+      externalRes.pipe(res);
+    });
+
+    externalReq.on('error', (err) => {
+      console.error('Proxy error:', err);
+      res.status(500).json({ error: err.message });
+    });
+
+    // Передаем тело запроса как есть
+    if (req.body) {
+      externalReq.write(req.body);
     }
-    externalRes.pipe(res);
-  });
+    
+    externalReq.end();
 
-  externalReq.on('error', (err) => {
-    console.error('Error:', err);
+  } catch (err) {
+    console.error('General error:', err);
     res.status(500).json({ error: err.message });
-  });
-
-  // Отправляем тело запроса, если необходимо
-  if (req.method !== 'GET' && req.method !== 'HEAD') {
-    externalReq.write(JSON.stringify(req.body));
   }
-  externalReq.end();
 });
 
 app.listen(port, () => {
-  console.log(`Proxy server listening at http://localhost:${port}`);
+  console.log(`Proxy server running on port ${port}`);
 });
